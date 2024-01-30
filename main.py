@@ -1,17 +1,92 @@
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
+import numpy as np
 import sv_ttk
 import sounddevice as sd
-import numpy as np
 import pygame
-from pydub import AudioSegment
 import os
-import ffmpeg
 import shutil
+import soundfile as sf
+import threading
 
 
 sample_rate = None
 sound_data = None
+global microphone_thread
+
+
+class MicrophoneThread(threading.Thread):
+    def __init__(self, callback):
+        super().__init__()
+        self.callback = callback
+        self.stop_event = threading.Event()
+
+    def run(self):
+        with sd.InputStream(callback=self.callback, channels=1):
+            print("Microphone thread started.")
+            self.stop_event.wait()
+
+    def stop(self):
+        print("Microphone thread stopped.")
+        self.stop_event.set()
+
+# Initialize sound_data and microphone_thread globally
+sound_data = np.zeros(44100)  # Assuming 44100 frames for initialization
+microphone_thread = MicrophoneThread(callback=lambda *args: None)  # Dummy callback for initialization
+
+def microphone_callback(indata, frames, time, status):
+    if status:
+        print(f"Error in microphone input: {status}")
+        return
+
+    # Mix the microphone input with the ongoing sound data
+    global sound_data
+    sound_data[:frames] += indata[:frames]
+
+def mix_with_microphone(file_name):
+    global sound_data, microphone_thread, file_path
+
+    mp3_directory = "user_mp3_files"
+    file_path = os.path.join(mp3_directory, file_name)
+
+    try:
+        # Load the audio file
+        sound_data, fs = sf.read(file_path, dtype='float32')
+
+        # Wait for the microphone thread to stop
+        microphone_thread.stop()
+        microphone_thread.join()
+
+        # Create and start a new microphone thread with the correct callback
+        microphone_thread = MicrophoneThread(callback=microphone_callback)
+        microphone_thread.start()
+
+        # Play the mixed audio using sounddevice
+        sd.play(sound_data, fs)
+        sd.wait()
+
+    except Exception as e:
+        messagebox.showerror("Error", f"Unable to mix with microphone: {str(e)}")
+
+def play_sound(file_name, mix_with_mic=True):
+    global sound_data
+
+    try:
+        if mix_with_mic:
+            mix_with_microphone(file_name)
+        else:
+            # Load the audio file
+            sound_data, fs = sf.read(file_path, dtype='float32')
+
+            # Play the audio using sounddevice
+            sd.play(sound_data, fs)
+            sd.wait()
+
+    except Exception as e:
+        messagebox.showerror("Error", f"Unable to play sound: {str(e)}")
+
+
+
 
 
 def display_button():
@@ -39,6 +114,7 @@ def display_button():
     load_sound_list(frame2)
 
 def save_sound_file():
+    global file_path
     file_path = filedialog.askopenfilename(filetypes=[("MP3 files", "*.mp3")])
 
     if file_path:
@@ -92,20 +168,6 @@ def save_sound_list(file_name):
             file.write(f"{file_name}\n")
 
 
-def play_sound(file_name):
-    mp3_directory = "user_mp3_files"
-    file_path = os.path.join(mp3_directory, file_name)
-
-    try:
-        pygame.mixer.init()
-        pygame.mixer.music.load(file_path)
-        pygame.mixer.music.play()
-        
-    except Exception as e:
-        messagebox.showerror("Error", f"Unable to play sound: {str(e)}")
-
-
-
 
 #information textbox
 def info():
@@ -147,6 +209,9 @@ def clear_window():
 
 #stops program
 def exit_program():
+    # Stop the microphone thread when exiting the program
+    microphone_thread.stop()
+    microphone_thread.join()
     root.destroy()
 
 
@@ -162,7 +227,7 @@ root.title("Sound File Parser")
 
 
 #setting tkinter window size (fullscreen windowed)
-root.state('zoomed')
+root.state('normal')
 
 # Set the minimum width and height for the window
 root.minsize(500, 400)
@@ -245,6 +310,9 @@ display_button()
 
 # Initialize Pygame only once
 pygame.init()
+
+# Start the microphone thread initially
+microphone_thread.start()
 
 #this is the loop that keeps the window persistent 
 root.mainloop()
