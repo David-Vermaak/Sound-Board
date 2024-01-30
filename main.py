@@ -65,7 +65,7 @@ def update_sound_list(file_name, frame2):
     play_button.pack(side=tk.LEFT, padx=5)
 
     # Save the updated list to a text file
-    save_sound_list(frame2)
+    save_sound_list(file_name)
 
 def load_sound_list(frame2):
     try:
@@ -76,11 +76,10 @@ def load_sound_list(frame2):
     except FileNotFoundError:
         pass  # File does not exist yet, ignore
 
-def save_sound_list(frame2):
-    sound_list = [widget.cget("text") for widget in frame2.winfo_children() if isinstance(widget, ttk.Label)]
+def save_sound_list(file_name):
+
     with open("sound_list.txt", "w") as file:
-        for sound in sound_list:
-            file.write(f"{sound}\n")
+            file.write(f"{file_name}\n")
 
 def play_sound(file_name):
     mp3_directory = "user_mp3_files"
