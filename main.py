@@ -77,9 +77,20 @@ def load_sound_list(frame2):
         pass  # File does not exist yet, ignore
 
 def save_sound_list(file_name):
+    with open("sound_list.txt", "a+") as file:
+        file.seek(0)  # Move the cursor to the beginning of the file
+        lines = file.readlines()
 
-    with open("sound_list.txt", "w") as file:
+        # Check if the file_name is already in the list
+        if file_name + '\n' not in lines:
+            file.seek(0)  # Move the cursor to the beginning of the file
+            file.truncate()  # Clear the contents of the file
+
+            # Write the updated list to the file
+            for line in lines:
+                file.write(line)
             file.write(f"{file_name}\n")
+
 
 def play_sound(file_name):
     mp3_directory = "user_mp3_files"
