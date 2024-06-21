@@ -179,7 +179,7 @@ def info():
         Welcome to the Sound Board
         How to Use:
 
-        1.) Select a File: Choose an Sound File by clicking the button
+        1.) Select a File: Choose a Sound File by clicking the button
         2.) After you have all of your Sound files you can play them by selecting them from the list
 
         
