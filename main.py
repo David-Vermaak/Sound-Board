@@ -1,19 +1,15 @@
+import time
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import numpy as np
 import sv_ttk
 import sounddevice as sd
 import pygame
+from pygame import mixer, _sdl2 as devicer
 import os
 import shutil
 import soundfile as sf
 import threading
-
-
-sample_rate = None
-sound_data = None
-global microphone_thread
-
 
 class MicrophoneThread(threading.Thread):
     def __init__(self, callback):
@@ -22,7 +18,7 @@ class MicrophoneThread(threading.Thread):
         self.stop_event = threading.Event()
 
     def run(self):
-        with sd.InputStream(callback=self.callback, channels=1):
+        with sd.InputStream(callback=self.callback, channels=1, dtype='float32'):
             print("Microphone thread started.")
             self.stop_event.wait()
 
@@ -30,51 +26,72 @@ class MicrophoneThread(threading.Thread):
         print("Microphone thread stopped.")
         self.stop_event.set()
 
+mixer.init()  # Initialize the mixer, this will allow the next command to work
+
+# Returns playback devices, Boolean value determines whether they are Input or Output devices.
+print("Inputs:", devicer.audio.get_audio_device_names(True))
+print("Outputs:", devicer.audio.get_audio_device_names(False))
+
+mixer.quit()  # Quit the mixer as it's initialized on your main playback device
+
 # Initialize sound_data and microphone_thread globally
-sound_data = np.zeros(44100)  # Assuming 44100 frames for initialization
+sample_rate = 44100  # Assuming 44100 Hz sample rate
+sound_data = np.zeros((sample_rate * 10, 1))  # 10 seconds buffer for initialization
 microphone_thread = MicrophoneThread(callback=lambda *args: None)  # Dummy callback for initialization
 
 def microphone_callback(indata, frames, time, status):
+    global sound_data
     if status:
         print(f"Error in microphone input: {status}")
         return
-
     # Mix the microphone input with the ongoing sound data
-    global sound_data
-    sound_data[:frames] += indata[:frames]
+    indata = indata.reshape(-1, 1)
+    sound_data[:frames] += indata
 
 def mix_with_microphone(file_name):
-    global sound_data, microphone_thread, file_path
+    global sound_data, microphone_thread, sample_rate
 
-    mp3_directory = "user_mp3_files"
-    file_path = os.path.join(mp3_directory, file_name)
+    sound_file_directory = "user_sound_files"
+    file_path = os.path.join(sound_file_directory, file_name)
 
     try:
         # Load the audio file
         sound_data, fs = sf.read(file_path, dtype='float32')
+        if fs != sample_rate:
+            raise ValueError(f"Sample rate of the audio file ({fs} Hz) does not match the expected sample rate ({sample_rate} Hz).")
 
-        # Wait for the microphone thread to stop
-        microphone_thread.stop()
-        microphone_thread.join()
+        sound_data = sound_data.reshape(-1, 1)
 
-        # Create and start a new microphone thread with the correct callback
+        # Wait for the microphone thread to stop if it is running
+        if microphone_thread.is_alive():
+            microphone_thread.stop()
+            microphone_thread.join()
+
+        # Reset the microphone thread with the correct callback
         microphone_thread = MicrophoneThread(callback=microphone_callback)
         microphone_thread.start()
 
-        # Play the mixed audio using sounddevice
-        sd.play(sound_data, fs)
-        sd.wait()
+        # Initialize the mixer with the virtual cable input
+        mixer.init(devicename='CABLE Input (VB-Audio Virtual Cable)')  # Use the virtual cable as output device
+        mixer.music.load(file_path)
+        mixer.music.play()
+
+        while mixer.music.get_busy():
+            time.sleep(1)
+
+        mixer.music.unload()
+        mixer.quit()
 
     except Exception as e:
         messagebox.showerror("Error", f"Unable to mix with microphone: {str(e)}")
 
 def play_sound(file_name, mix_with_mic=True):
-    global sound_data
-
     try:
         if mix_with_mic:
             mix_with_microphone(file_name)
         else:
+            sound_file_directory = "user_sound_files"
+            file_path = os.path.join(sound_file_directory, file_name)
             # Load the audio file
             sound_data, fs = sf.read(file_path, dtype='float32')
 
@@ -84,9 +101,6 @@ def play_sound(file_name, mix_with_mic=True):
 
     except Exception as e:
         messagebox.showerror("Error", f"Unable to play sound: {str(e)}")
-
-
-
 
 
 def display_button():
@@ -115,15 +129,15 @@ def display_button():
 
 def save_sound_file():
     global file_path
-    file_path = filedialog.askopenfilename(filetypes=[("MP3 files", "*.mp3")])
+    file_path = filedialog.askopenfilename(filetypes=[("Sound files", "*.ogg")])
 
     if file_path:
-        mp3_directory = "user_mp3_files"
-        if not os.path.exists(mp3_directory):
-            os.makedirs(mp3_directory)
+        sound_file_directory = "user_sound_files"
+        if not os.path.exists(sound_file_directory):
+            os.makedirs(sound_file_directory)
 
         file_name = os.path.basename(file_path)
-        destination_path = os.path.join(mp3_directory, file_name)
+        destination_path = os.path.join(sound_file_directory, file_name)
         shutil.copy(file_path, destination_path)
 
         

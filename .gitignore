@@ -161,4 +161,5 @@ cython_debug/
 
 
 *.mp3
+*.ogg
 sound_list.txt
